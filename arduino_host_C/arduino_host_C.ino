@@ -14,18 +14,19 @@
  *  │    MOSI → D11  (硬體 SPI)                                       │
  *  │    SCK  → D13  (硬體 SPI)                                       │
  *  │    LED  → 3.3V 或透過 100Ω 電阻接 5V                           │
- *  │                                                                 │
+ *  │                                                               │
  *  │  ── 無源蜂鳴器 ─────────────────────────────────────────────   │
- *  │    正極  → D3  (PWM, tone())                                    │
- *  │    負極  → GND                                                  │
- *  │                                                                 │
+ *  │    正極  → D3  (PWM, tone())                                   │
+ *  │    負極  → GND                                                 │
+ *  │                                                                │
  *  │  ── 玩家 A (Arduino A) ─────────────────────────────────────   │
- *  │    A.TX → 主機 D0  (HardwareSerial RX)                         │
- *  │    ⚠ 上傳程式時請先拔掉此連線，避免衝突                         │
+ *  │    A.TX → 主機 D0  (HardwareSerial RX)                         ｜
+ *  |    A.RX → 主機 D1  (HardwareSerial TX)                          │
+ *  │    ⚠ 上傳程式時請先拔掉此連線，避免衝突                           │
  *  │                                                                 │
- *  │  ── 玩家 B (Arduino B) ─────────────────────────────────────   │
- *  │    B.TX → 主機 D4  (SoftwareSerial RX)                         │
- *  │    D5   → (SoftwareSerial TX, 不使用，空接即可)                 │
+ *  │  ── 玩家 B (Arduino B) ─────────────────────────────────────    │
+ *  │    B.TX → 主機 D4  (SoftwareSerial RX)                          |
+ *  |    B.RX → 主機 D5  (SoftwareSerial TX)                          │
  *  └─────────────────────────────────────────────────────────────────┘
  *
  *  通訊協定：玩家端按左鍵送 'L'，按右鍵送 'R'（9600 baud）
@@ -74,7 +75,7 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 
 #define BUZZER_PIN 3
 
-SoftwareSerial serialB(4, 5);   // D4=RX(接B.TX), D5=TX(空接)
+SoftwareSerial serialB(4, 5);   // D4=RX(接B.TX), D5=TX(接B.RX)
 
 // ════════════════════════════════════════════════════════════════════
 //  螢幕尺寸 & 顏色
@@ -206,6 +207,7 @@ uint32_t lastFrameMs  = 0;
 bool lobbyPressA = false, lobbyPressB = false;
 uint32_t gameOverTimer   = 0;
 bool     gameOverPending = false;
+bool gameRestarting = false;
 
 // ════════════════════════════════════════════════════════════════════
 //  圖形輔助
@@ -304,7 +306,60 @@ void showJudgeText(bool isPlayerA, int16_t score) {
   else                   { tft.setTextColor(COL_RED);     tft.setCursor(JUDGE_X+5, y); tft.print("MISS");     }
 }
 
+// ════════════════════════════════════════════════════════════════════
+//  新增：回傳判定資料給玩家端
+// ════════════════════════════════════════════════════════════════════
+void sendFeedback(bool isPlayerA, int16_t score) {
+  byte feedback = 0x00; // 預設 0 代表沒事或 MISS
+  if      (score == 150) feedback = 0x03; // Perfect
+  else if (score == 100) feedback = 0x02; // Great
+  else if (score ==  50) feedback = 0x01; // Good
+  if (gameRestarting) feedback = 0x04;
+  //else                   feedback = '0'; // Miss
+
+  if (isPlayerA) {
+    Serial.print(feedback);    // 透過硬體 Serial 送給 P1 (D1)
+  } else {
+    serialB.print(feedback);   // 透過 SoftwareSerial 送給 P2 (D5)
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  修改後的判定函式
+// ════════════════════════════════════════════════════════════════════
 void processButtonEvent(bool isPlayerA, bool isLeft) {
+  int16_t bestDist = 999;
+  int8_t  bestIdx  = -1;
+  for (uint8_t i = 0; i < MAX_NOTES; i++) {
+    if (!notes[i].active || notes[i].judged)    continue;
+    if (notes[i].isPlayerA != isPlayerA)        continue;
+    int16_t d = abs(notes[i].x - JUDGE_X);
+    if (d < bestDist) { bestDist = d; bestIdx = i; }
+  }
+  
+  // 若沒按到音符，送 '0' 回饋
+  if (bestIdx < 0) { 
+    showJudgeText(isPlayerA, 0); 
+    //sendFeedback(isPlayerA, 0); 
+    return; 
+  }
+
+  RhythmNote& n = notes[bestIdx];
+  bool    correct = (n.isYellow == isLeft);
+  int16_t pts     = correct ? calcScore(bestDist) : 0;
+  
+  if (isPlayerA) scoreA += pts; else scoreB += pts;
+  
+  showJudgeText(isPlayerA, pts);
+  sendFeedback(isPlayerA, pts); //新增：送出判定結果給玩家
+  
+  eraseNote(n);
+  n.active = false;
+  n.judged = true;
+  drawScores();
+}
+
+/*void processButtonEvent(bool isPlayerA, bool isLeft) {
   int16_t bestDist = 999;
   int8_t  bestIdx  = -1;
   for (uint8_t i = 0; i < MAX_NOTES; i++) {
@@ -324,7 +379,7 @@ void processButtonEvent(bool isPlayerA, bool isLeft) {
   n.active = false;
   n.judged = true;
   drawScores();
-}
+}*/
 
 // ════════════════════════════════════════════════════════════════════
 //  序列埠
@@ -393,6 +448,12 @@ void resetGame() {
   gameOverPending = false;
   noTone(BUZZER_PIN);
   for (uint8_t i = 0; i < MAX_NOTES; i++) notes[i].active = false;
+
+  // 觸發重置通知
+  gameRestarting = true;
+  sendFeedback(true, 0);  // 通知 P1
+  sendFeedback(false, 0); // 通知 P2
+  gameRestarting = false; // 發送完立刻關閉，避免影響後續判定
 }
 
 bool isGameOver() {
