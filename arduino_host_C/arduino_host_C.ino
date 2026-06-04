@@ -182,56 +182,14 @@ const MusicNote SONG[] PROGMEM = {
   {N_D4, 400, false, false},
   {N_D4, 400, true,  true },
   {N_C4, 800, false, false},
-  // ── 第二段 300ms/拍（稍快）───────────────────────────────────
-  {N_C5, 400, true,  true },
-  {N_C5, 400, false, false},
-  {N_G4, 400, true,  true },
-  {N_G4, 400, false, false},
-  {N_A4, 400, true,  true },
-  {N_A4, 400, false, false},
-  {N_G4, 800, true,  false},
-  {N_F4, 400, false, true },
-  {N_F4, 400, true,  true },
-  {N_E4, 400, false, false},
-  {N_E4, 400, true,  true },
-  {N_D4, 400, false, false},
-  {N_D4, 400, true,  true },
-  {N_C4, 800, false, false},
-  {N_G4, 400, true,  true },
-  {N_G4, 400, false, false},
-  {N_F4, 400, true,  true },
-  {N_F4, 400, false, false},
-  {N_E4, 400, true,  true },
-  {N_E4, 400, false, false},
-  {N_D4, 800, true,  false},
-  {N_G4, 400, false, true },
-  {N_G4, 400, true,  true },
-  {N_F4, 400, false, false},
-  {N_F4, 400, true,  true },
-  {N_E4, 400, false, false},
-  {N_E4, 400, true,  true },
-  {N_D4, 800, false, false},
-  {N_C4, 400, true,  true },
-  {N_C4, 400, false, false},
-  {N_G4, 400, true,  true },
-  {N_G4, 400, false, false},
-  {N_A4, 400, true,  true },
-  {N_A4, 400, false, false},
-  {N_G4, 800, true,  false},
-  {N_F4, 400, false, true },
-  {N_F4, 400, true,  true },
-  {N_E4, 400, false, false},
-  {N_E4, 400, true,  true },
-  {N_D4, 400, false, false},
-  {N_D4, 400, true,  true },
-  {N_C4,1200, false, false},
+
 };
 #define SONG_LEN (sizeof(SONG)/sizeof(SONG[0]))
 
 // ════════════════════════════════════════════════════════════════════
 //  執行期變數
 // ════════════════════════════════════════════════════════════════════
-#define MAX_NOTES 24
+#define MAX_NOTES 8
 RhythmNote notes[MAX_NOTES];
 
 int16_t  scoreA = 0, scoreB = 0;
