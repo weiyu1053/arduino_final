@@ -14,10 +14,7 @@
  *  │    MOSI → D11  (硬體 SPI)                                       │
  *  │    SCK  → D13  (硬體 SPI)                                       │
  *  │    LED  → 3.3V 或透過 100Ω 電阻接 5V                           │
- *  │                                                               │
- *  │  ── 無源蜂鳴器 ─────────────────────────────────────────────   │
- *  │    正極  → D3  (PWM, tone())                                   │
- *  │    負極  → GND                                                 │
+ *  │                                                               │                                           │
  *  │                                                                │
  *  │  ── 玩家 A (Arduino A) ─────────────────────────────────────   │
  *  │    A.TX → 主機 D0  (HardwareSerial RX)                         ｜
@@ -31,10 +28,6 @@
  *
  *  通訊協定：玩家端按左鍵送 'L'，按右鍵送 'R'（9600 baud）
  *
- *  音符同步邏輯：
- *    每次蜂鳴器切換到下一個音，就在螢幕右側生成一個圖形。
- *    圖形以固定速度向左移動，飛行時間 = (SCREEN_W - JUDGE_X) / 速度。
- *    保證「一音一圖」且不會重疊。
  * =====================================================================
  */
 
@@ -50,8 +43,7 @@
 //  Struct 定義（必須在所有函式之前）
 // ════════════════════════════════════════════════════════════════════
 struct MusicNote {
-  uint16_t freq;        // Hz，0 = 休止符
-  uint16_t duration;    // ms
+  uint32_t spawnTime;   // 距離歌曲開始的絕對 ms
   bool     isYellow;    // 對應音符顏色：true=黃(左鍵) false=藍(右鍵)
   bool     isPlayerA;   // 對應玩家：true=P1 false=P2
 };
@@ -73,7 +65,7 @@ struct RhythmNote {
 #define TFT_DC  10
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 
-#define BUZZER_PIN 3
+// #define BUZZER_PIN 3
 
 SoftwareSerial serialB(4, 5);   // D4=RX(接B.TX), D5=TX(接B.RX)
 
@@ -139,51 +131,14 @@ GameState gameState = LOBBY;
 // isYellow / isPlayerA 交替排列，讓兩個玩家輪流出現音符
 // Y=黃色(左鍵)  B=藍色(右鍵)   A=玩家A  b=玩家B
 //                    freq  dur   Y/B    A/b
+/*
+PROGMEM：AVR 的巨集，指示編譯器把這份資料放進 Flash（程式記憶體） 而非 SRAM
+必須使用pgm_read_word存取。例如：pgm_read_word(&SONG[i].freq);
+*/
 const MusicNote SONG[] PROGMEM = {
-  // ── 第一段 400ms/拍 ────────────────────────────────────────────
-  {N_C4, 400, true,  true },   // 閃-
-  {N_C4, 400, false, false},   // 閃-
-  {N_G4, 400, true,  true },   // 亮-
-  {N_G4, 400, false, false},   // 亮-
-  {N_A4, 400, true,  true },   // 滿-
-  {N_A4, 400, false, false},   // 天-
-  {N_G4, 800, true,  true },   // 星--
-  {N_F4, 400, false, false},   // 好-
-  {N_F4, 400, true,  true },   // 像-
-  {N_E4, 400, false, false},   // 許-
-  {N_E4, 400, true,  true },   // 多-
-  {N_D4, 400, false, false},   // 小-
-  {N_D4, 400, true,  true },   // 眼-
-  {N_C4, 800, false, false},   // 睛--
-  {N_G4, 400, true,  true },
-  {N_G4, 400, false, false},
-  {N_F4, 400, true,  true },
-  {N_F4, 400, false, false},
-  {N_E4, 400, true,  true },
-  {N_E4, 400, false, false},
-  {N_D4, 800, true,  false},
-  {N_G4, 400, false, true },
-  {N_G4, 400, true,  true },
-  {N_F4, 400, false, false},
-  {N_F4, 400, true,  true },
-  {N_E4, 400, false, false},
-  {N_E4, 400, true,  true },
-  {N_D4, 800, false, false},
-  {N_C4, 400, true,  true },
-  {N_C4, 400, false, false},
-  {N_G4, 400, true,  true },
-  {N_G4, 400, false, false},
-  {N_A4, 400, true,  true },
-  {N_A4, 400, false, false},
-  {N_G4, 800, true,  false},
-  {N_F4, 400, false, true },
-  {N_F4, 400, true,  true },
-  {N_E4, 400, false, false},
-  {N_E4, 400, true,  true },
-  {N_D4, 400, false, false},
-  {N_D4, 400, true,  true },
-  {N_C4, 800, false, false},
-
+  {0,    true,  true },   // 黃 A 
+  {0,    false, false},   // 藍 B，與上個音符在同個位置（0ms）生成
+  {400,  false, true },   // 藍 A，再400ms生成
 };
 #define SONG_LEN (sizeof(SONG)/sizeof(SONG[0]))
 
@@ -197,10 +152,8 @@ int16_t  scoreA = 0, scoreB = 0;
 int16_t  prevScoreA = -1, prevScoreB = -1;
 
 uint8_t  musicIdx     = 0;
-uint32_t musicTimer   = 0;
 bool     musicPlaying = false;
 uint32_t songStartMs  = 0;
-bool     firstNote    = true;   // 第一個音需要立刻 tone()
 
 uint32_t lastFrameMs  = 0;
 
@@ -441,12 +394,9 @@ void resetGame() {
   scoreA = scoreB = 0;
   prevScoreA = prevScoreB = -1;
   musicIdx     = 0;
-  musicTimer   = 0;
   musicPlaying = false;
-  firstNote    = true;
   lobbyPressA  = lobbyPressB  = false;
   gameOverPending = false;
-  noTone(BUZZER_PIN);
   for (uint8_t i = 0; i < MAX_NOTES; i++) notes[i].active = false;
 
   // 觸發重置通知
@@ -469,8 +419,6 @@ bool isGameOver() {
 void setup() {
   Serial.begin(9600);
   serialB.begin(9600);
-  pinMode(BUZZER_PIN, OUTPUT);
-  noTone(BUZZER_PIN);
   tft.begin();
   tft.setRotation(1);
   resetGame();
@@ -492,10 +440,8 @@ void loop() {
         resetGame();
         drawStaticUI();
         songStartMs  = millis();
-        musicTimer   = songStartMs;
         musicPlaying = true;
         lastFrameMs  = songStartMs;
-        firstNote    = true;
         gameState    = PLAYING;
       }
       break;
@@ -503,45 +449,22 @@ void loop() {
     // ── PLAYING ────────────────────────────────────────────────────
     case PLAYING: {
 
-      // ── 1. 蜂鳴器 & 音符同步生成 ───────────────────────────────
-      // 策略：每次到了切換下一個音的時間點，就
-      //   a) 播放新音高
-      //   b) 若該音不是休止符，在螢幕右側生成一個節奏圖形
-      if (musicIdx < SONG_LEN && musicPlaying) {
+      // ── 1. 音符生成（依絕對時間掃描）─────────────────────────────
+      if (musicPlaying) {
+        uint32_t elapsed = now - songStartMs;
 
-        if (firstNote) {
-          // 遊戲剛開始，立刻處理第 0 個音
-          firstNote = false;
-          uint16_t f = pgm_read_word(&SONG[0].freq);
-          if (f > 0) {
-            tone(BUZZER_PIN, f);
-            bool iy = pgm_read_byte(&SONG[0].isYellow);
-            bool ia = pgm_read_byte(&SONG[0].isPlayerA);
-            spawnNote(iy, ia);
-          }
+        while (musicIdx < SONG_LEN) {
+          uint32_t spawnTime = pgm_read_dword(&SONG[musicIdx].spawnTime);
+          if (spawnTime > elapsed) break;  // 後面的都還沒到，不用繼續掃
+
+          bool iy = pgm_read_byte(&SONG[musicIdx].isYellow);
+          bool ia = pgm_read_byte(&SONG[musicIdx].isPlayerA);
+          spawnNote(iy, ia);
+          musicIdx++;
         }
 
-        uint16_t dur = pgm_read_word(&SONG[musicIdx].duration);
-        if (now - musicTimer >= dur) {
-          musicTimer += dur;
-          musicIdx++;
-
-          if (musicIdx < SONG_LEN) {
-            uint16_t f  = pgm_read_word(&SONG[musicIdx].freq);
-            bool     iy = pgm_read_byte(&SONG[musicIdx].isYellow);
-            bool     ia = pgm_read_byte(&SONG[musicIdx].isPlayerA);
-
-            if (f > 0) {
-              tone(BUZZER_PIN, f);
-              spawnNote(iy, ia);   // ← 每個非休止音，對應生成一個圖形
-            } else {
-              noTone(BUZZER_PIN);
-              // 休止符：不生成圖形
-            }
-          } else {
-            noTone(BUZZER_PIN);
-            musicPlaying = false;
-          }
+        if (musicIdx >= SONG_LEN) {
+          musicPlaying = false;
         }
       }
 
