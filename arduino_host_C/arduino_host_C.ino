@@ -1,99 +1,68 @@
 /*
- * =====================================================================
- *  雙人節奏音律遊戲 — 主機 (Arduino C)
+ * =================================================================================
+ *  雙人節奏音律遊戲 — 主機 (Arduino Host C)
+ * =================================================================================
+ *  腳位配置 (Arduino Uno):
  *
- *  ┌─────────────────────────────────────────────────────────────────┐
- *  │  腳位配置 (Arduino Uno)                                          │
- *  │                                                                 │
- *  │  ── TFT ILI9341 2.8" SPI 240×320 ──────────────────────────   │
- *  │    VCC  → 3.3V 或 5V (依模組規格)                               │
- *  │    GND  → GND                                                   │
- *  │    CS   → D8                                                    │
- *  │    RST  → D9                                                    │
- *  │    DC   → D10                                                   │
- *  │    MOSI → D11  (硬體 SPI)                                       │
- *  │    SCK  → D13  (硬體 SPI)                                       │
- *  │    LED  → 3.3V 或透過 100Ω 電阻接 5V                           │
- *  │                                                               │                                           │
- *  │                                                                │
- *  │  ── 玩家 A (Arduino A) ─────────────────────────────────────   │
- *  │    A.TX → 主機 D0  (HardwareSerial RX)                         ｜
- *  |    A.RX → 主機 D1  (HardwareSerial TX)                          │
- *  │    ⚠ 上傳程式時請先拔掉此連線，避免衝突                           │
- *  │                                                                 │
- *  │  ── 玩家 B (Arduino B) ─────────────────────────────────────    │
- *  │    B.TX → 主機 D4  (SoftwareSerial RX)                          |
- *  |    B.RX → 主機 D5  (SoftwareSerial TX)                          │
- *  |  ── DFplayer mini Mp3──────────────────────────────────────
- *  |   TX → 6
- *  |   RX → 7
- *  └─────────────────────────────────────────────────────────────────┘
+ *  ── TFT ILI9341 2.8" SPI 240×320 ────────────────────────────────────────────────
+ *    VCC  → 3.3V 或 5V (依模組規格)
+ *    GND  → GND
+ *    CS   → D8
+ *    RST  → D9
+ *    DC   → D10
+ *    MOSI → D11 (硬體 SPI)
+ *    SCK  → D13 (硬體 SPI)
+ *    LED  → 3.3V 或透過 100Ω 電阻接 5V
  *
- *  通訊協定：玩家端按左鍵送 'L'，按右鍵送 'R'（9600 baud）
+ *  ── 玩家 A (Arduino Player A) ──────────────────────────────────────────────────
+ *    A.TX → 主機 D0 (HardwareSerial RX)
+ *    A.RX → 主機 D1 (HardwareSerial TX)
+ *    ⚠ 注意：上傳程式時請先拔掉此連線，避免序列埠衝突。
  *
- * =====================================================================
+ *  ── 玩家 B (Arduino Player B) ──────────────────────────────────────────────────
+ *    B.TX → 主機 D4 (SoftwareSerial RX)
+ *    B.RX → 主機 D5 (SoftwareSerial TX)
+ *
+ *  ── DFPlayer Mini MP3 ──────────────────────────────────────────────────────────
+ *    TX → D6
+ *    RX → D7
+ *
+ *  通訊協定：
+ *    玩家端按左鍵送 'L'，按右鍵送 'R' (Baud Rate: 9600)
+ * =================================================================================
  */
 
-// ════════════════════════════════════════════════════════════════════
-//  函式庫
-// ════════════════════════════════════════════════════════════════════
+// ─── 函式庫 ──────────────────────────────────────────────────────────────────
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
 #include <SPI.h>
 #include <SoftwareSerial.h>
 
-#include <DFMiniMp3.h>
-
-SoftwareSerial mySerial(7, 6); // RX, TX, 停用rx是為了改善音符卡頓的問題
-
-
-// ════════════════════════════════════════════════════════════════════
-//  Dfplayer Mini Mp3相關
-// ════════════════════════════════════════════════════════════════════
-class Mp3Notify {
-public:
-  static void OnError([[maybe_unused]] DFMiniMp3<SoftwareSerial, Mp3Notify>& mp3, uint16_t errorCode) {}
-  static void OnPlayFinished([[maybe_unused]] DFMiniMp3<SoftwareSerial, Mp3Notify>& mp3, [[maybe_unused]] DfMp3_PlaySources source, uint16_t track) {}
-  static void OnPlaySourceOnline([[maybe_unused]] DFMiniMp3<SoftwareSerial, Mp3Notify>& mp3, [[maybe_unused]] DfMp3_PlaySources source) {}
-  static void OnPlaySourceInserted([[maybe_unused]] DFMiniMp3<SoftwareSerial, Mp3Notify>& mp3, [[maybe_unused]] DfMp3_PlaySources source) {}
-  static void OnPlaySourceRemoved([[maybe_unused]] DFMiniMp3<SoftwareSerial, Mp3Notify>& mp3, [[maybe_unused]] DfMp3_PlaySources source) {}
-};
-typedef DFMiniMp3<SoftwareSerial, Mp3Notify> DfMp3;
-DfMp3 dfmp3(mySerial);
-
-// ════════════════════════════════════════════════════════════════════
-//  Struct 定義（必須在所有函式之前）
-// ════════════════════════════════════════════════════════════════════
+// ─── 資料結構定義 ────────────────────────────────────────────────────────────
 struct MusicNote {
-  uint32_t spawnTime;   // 距離歌曲開始的絕對 ms
-  bool     isYellow;    // 對應音符顏色：true=黃(左鍵) false=藍(右鍵)
-  bool     isPlayerA;   // 對應玩家：true=P1 false=P2
+  uint32_t spawnTime;   // 距離歌曲開始的絕對毫秒數 (ms)
+  bool     isYellow;    // 音符顏色：true=黃(左鍵), false=藍(右鍵)
+  bool     isPlayerA;   // 對應玩家：true=P1, false=P2
 };
 
 struct RhythmNote {
-  bool    active;
-  bool    isYellow;
-  bool    isPlayerA;
-  int16_t x;
-  int16_t prevX;
-  bool    judged;
+  bool    active;       // 是否啟用
+  bool    isYellow;     // 是否為黃色
+  bool    isPlayerA;    // 是否為玩家 A
+  int16_t x;            // 當前 X 座標
+  int16_t prevX;        // 前一幀 X 座標 (用於擦除)
+  bool    judged;       // 是否已判定
 };
 
-// ════════════════════════════════════════════════════════════════════
-//  腳位 & 硬體物件
-// ════════════════════════════════════════════════════════════════════
+// ─── 硬體物件設定 ────────────────────────────────────────────────────────────
 #define TFT_CS   8
 #define TFT_RST  9
 #define TFT_DC  10
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 
-// #define BUZZER_PIN 3
+SoftwareSerial serialB(4, 5);   // D4=RX (接 B.TX), D5=TX (接 B.RX)
 
-SoftwareSerial serialB(4, 5);   // D4=RX(接B.TX), D5=TX(接B.RX)
-
-// ════════════════════════════════════════════════════════════════════
-//  螢幕尺寸 & 顏色
-// ════════════════════════════════════════════════════════════════════
+// ─── 螢幕尺寸與顏色定義 ──────────────────────────────────────────────────────
 #define SCREEN_W 320
 #define SCREEN_H 240
 
@@ -109,38 +78,29 @@ SoftwareSerial serialB(4, 5);   // D4=RX(接B.TX), D5=TX(接B.RX)
 #define COL_CYAN       ILI9341_CYAN
 #define COL_MAGENTA    ILI9341_MAGENTA
 
-// ════════════════════════════════════════════════════════════════════
-//  版面 & 速度參數
-// ════════════════════════════════════════════════════════════════════
-#define LANE_H      108    // 每個 lane 高度
-#define LANE_A_Y      4    // P1 lane 起始 Y
-#define LANE_B_Y    128    // P2 lane 起始 Y
-#define DIVIDER_Y   116    // 分隔線 Y
+// ─── 版面與速度參數 ──────────────────────────────────────────────────────────
+#define LANE_H      108    // 每個跑道的高度
+#define LANE_A_Y      4    // P1 跑道起始 Y 座標
+#define LANE_B_Y    128    // P2 跑道起始 Y 座標
+#define DIVIDER_Y   116    // 分隔線 Y 座標
 #define NOTE_R       13    // 音符半徑 (px)
-#define JUDGE_X      45    // 判定線 X
+#define JUDGE_X      45    // 判定線 X 座標
 
-// ── 速度調整區 ──────────────────────────────────────────────────────
-// NOTE_SPEED：每幀移動幾像素，越大越快
-// FRAME_MS  ：每幀間隔，越小越順（建議 8~16）
-#define NOTE_SPEED   10     // px / frame  ← 調快（原本 2）
-#define FRAME_MS     4     // ms / frame  ← 刷新加倍（原本 16）
+// ─── 速度調整區 ──────────────────────────────────────────────────────────────
+// NOTE_SPEED：每幀移動像素，越大越快
+// FRAME_MS  ：每幀間隔，越小越順（建議 4~16）
+#define NOTE_SPEED   10     // px / frame
+#define FRAME_MS     4      // ms / frame
 
 // 飛行距離 = 螢幕右緣到判定線
-// 飛行時間(ms) = (SCREEN_W - JUDGE_X) / NOTE_SPEED * FRAME_MS
-// = (320-45)/5*8 = 440ms  → 音符生成後 440ms 恰好到達判定線
-#define TRAVEL_PX   (SCREEN_W - JUDGE_X + NOTE_R)   // 生成點到判定線距離
+#define TRAVEL_PX   (SCREEN_W - JUDGE_X + NOTE_R)
 
-// ════════════════════════════════════════════════════════════════════
-//  有限狀態機
-// ════════════════════════════════════════════════════════════════════
+// ─── 遊戲狀態機 ──────────────────────────────────────────────────────────────
 enum GameState { LOBBY, PLAYING, RESULT };
 GameState gameState = LOBBY;
 
-// ════════════════════════════════════════════════════════════════════
-//  旋律資料（PROGMEM）
-//  每個音符同時記錄：音高、音長、對應玩家、按鍵顏色
-//  休止符（freq=0）不生成圖形，只停頓
-// ════════════════════════════════════════════════════════════════════
+// ─── 旋律資料 (PROGMEM) ──────────────────────────────────────────────────────
+// 音高定義
 #define N_C4  262
 #define N_D4  294
 #define N_E4  330
@@ -150,38 +110,34 @@ GameState gameState = LOBBY;
 #define N_C5  523
 #define REST    0
 
-// isYellow / isPlayerA 交替排列，讓兩個玩家輪流出現音符
-// Y=黃色(左鍵)  B=藍色(右鍵)   A=玩家A  b=玩家B
-//                    freq  dur   Y/B    A/b
 /*
-PROGMEM：AVR 的巨集，指示編譯器把這份資料放進 Flash（程式記憶體） 而非 SRAM
-必須使用pgm_read_word存取。例如：pgm_read_word(&SONG[i].freq);
-*/
+ * SONG 陣列使用 PROGMEM 儲存於 Flash 記憶體，避免佔用 SRAM。
+ * isYellow: true=黃色(左鍵), false=藍色(右鍵)
+ * isPlayerA: true=玩家 A, false=玩家 B
+ */
 const MusicNote SONG[] PROGMEM = {
   {0,    true,  true },   // 黃 A 
-  {0,    false, false},   // 藍 B，與上個音符在同個位置（0ms）生成
-  {400,  false, true },   // 藍 A，再400ms生成
+  {0,    false, false},   // 藍 B
+  {400,  false, true },   // 藍 A
   {800,    true,  true },   // 黃 A 
-  {800,    false, false},   // 藍 B，與上個音符在同個位置（0ms）生成
-  {1200,  false, true },   // 藍 A，再400ms生成
+  {800,    false, false},   // 藍 B
+  {1200,  false, true },   // 藍 A
   {1600,    true,  true },   // 黃 A 
-  {1600,    false, false},   // 藍 B，與上個音符在同個位置（0ms）生成
-  {2000,  false, true },   // 藍 A，再400ms生成
+  {1600,    false, false},   // 藍 B
+  {2000,  false, true },   // 藍 A
   {2400,    true,  true },   // 黃 A 
-  {2400,    false, false},   // 藍 B，與上個音符在同個位置（0ms）生成
-  {2800,  false, true },   // 藍 A，再400ms生成
+  {2400,    false, false},   // 藍 B
+  {2800,  false, true },   // 藍 A
   {3200,    true,  true },   // 黃 A 
-  {3200,    false, false},   // 藍 B，與上個音符在同個位置（0ms）生成
-  {3600,  false, true },   // 藍 A，再400ms生成
-  {4000,  false, true },   // 藍 A，再400ms生成
+  {3200,    false, false},   // 藍 B
+  {3600,  false, true },   // 藍 A
+  {4000,  false, true },   // 藍 A
   {4000,    true,  true },   // 黃 A 
-  {4400,    false, false},   // 藍 B，與上個音符在同個位置（0ms）生成
+  {4400,    false, false},   // 藍 B
 };
 #define SONG_LEN (sizeof(SONG)/sizeof(SONG[0]))
 
-// ════════════════════════════════════════════════════════════════════
-//  執行期變數
-// ════════════════════════════════════════════════════════════════════
+// ─── 執行期變數 ──────────────────────────────────────────────────────────────
 #define MAX_NOTES 8
 RhythmNote notes[MAX_NOTES];
 
@@ -199,7 +155,7 @@ uint32_t gameOverTimer   = 0;
 bool     gameOverPending = false;
 bool gameRestarting = false;
 
-bool frameChanged = 0;
+volatile bool frameChanged = 0;
 
 // ════════════════════════════════════════════════════════════════════
 //  圖形輔助
@@ -316,9 +272,7 @@ void sendFeedback(bool isPlayerA, int16_t score) {
   }
 }
 
-// ════════════════════════════════════════════════════════════════════
-//  修改後的判定函式
-// ════════════════════════════════════════════════════════════════════
+// ─── 遊戲控制與判定 ──────────────────────────────────────────────────────────
 void processButtonEvent(bool isPlayerA, bool isLeft) {
   int16_t bestDist = 999;
   int8_t  bestIdx  = -1;
@@ -329,10 +283,8 @@ void processButtonEvent(bool isPlayerA, bool isLeft) {
     if (d < bestDist) { bestDist = d; bestIdx = i; }
   }
   
-  // 若沒按到音符，送 '0' 回饋
   if (bestIdx < 0) { 
     showJudgeText(isPlayerA, 0); 
-    //sendFeedback(isPlayerA, 0); 
     return; 
   }
 
@@ -343,7 +295,7 @@ void processButtonEvent(bool isPlayerA, bool isLeft) {
   if (isPlayerA) scoreA += pts; else scoreB += pts;
   
   showJudgeText(isPlayerA, pts);
-  sendFeedback(isPlayerA, pts); //新增：送出判定結果給玩家
+  sendFeedback(isPlayerA, pts); // 送出判定結果給玩家
   
   eraseNote(n);
   n.active = false;
@@ -351,31 +303,7 @@ void processButtonEvent(bool isPlayerA, bool isLeft) {
   drawScores();
 }
 
-/*void processButtonEvent(bool isPlayerA, bool isLeft) {
-  int16_t bestDist = 999;
-  int8_t  bestIdx  = -1;
-  for (uint8_t i = 0; i < MAX_NOTES; i++) {
-    if (!notes[i].active || notes[i].judged)   continue;
-    if (notes[i].isPlayerA != isPlayerA)        continue;
-    int16_t d = abs(notes[i].x - JUDGE_X);
-    if (d < bestDist) { bestDist = d; bestIdx = i; }
-  }
-  if (bestIdx < 0) { showJudgeText(isPlayerA, 0); return; }
-
-  RhythmNote& n = notes[bestIdx];
-  bool    correct = (n.isYellow == isLeft);
-  int16_t pts     = correct ? calcScore(bestDist) : 0;
-  if (isPlayerA) scoreA += pts; else scoreB += pts;
-  showJudgeText(isPlayerA, pts);
-  eraseNote(n);
-  n.active = false;
-  n.judged = true;
-  drawScores();
-}*/
-
-// ════════════════════════════════════════════════════════════════════
-//  序列埠
-// ════════════════════════════════════════════════════════════════════
+// ─── 序列埠通訊 ──────────────────────────────────────────────────────────────
 void readSerialEvents() {
   while (Serial.available()) {
     char c = Serial.read();
@@ -393,9 +321,7 @@ void readSerialEvents() {
   }
 }
 
-// ════════════════════════════════════════════════════════════════════
-//  畫面
-// ════════════════════════════════════════════════════════════════════
+// ─── UI 畫面繪製 ─────────────────────────────────────────────────────────────
 void drawLobby() {
   tft.fillScreen(COL_BG);
   tft.setTextSize(3); tft.setTextColor(COL_YELLOW);
@@ -426,9 +352,7 @@ void drawResult() {
   tft.setCursor(20, 212); tft.print("Both press any button to LOBBY");
 }
 
-// ════════════════════════════════════════════════════════════════════
-//  遊戲重置
-// ════════════════════════════════════════════════════════════════════
+// ─── 遊戲控制 ───────────────────────────────────────────────────────────────
 void resetGame() {
   scoreA = scoreB = 0;
   prevScoreA = prevScoreB = -1;
@@ -440,7 +364,6 @@ void resetGame() {
 
   // 觸發重置通知
   gameRestarting = true;
-  // test
   sendFeedback(true, 0);  // 通知 P1
   sendFeedback(false, 0); // 通知 P2
   gameRestarting = false; // 發送完立刻關閉，避免影響後續判定
@@ -458,9 +381,7 @@ ISR(TIMER1_COMPA_vect){
   frameChanged = 1;
 }
 
-// ════════════════════════════════════════════════════════════════════
-//  SETUP
-// ════════════════════════════════════════════════════════════════════
+// ─── 初始化 (Setup) ──────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(9600);
   serialB.begin(9600);
@@ -469,55 +390,26 @@ void setup() {
   resetGame();
   drawLobby();
 
-  // ── Timer1 完整設定（必須在 DFPlayer 之前，且一次完成）──
+  // Timer1 設定：每 8ms 觸發一次中斷用於更新畫面
   cli();
   TCCR1A = 0;
   TCCR1B = 0;
   TCCR1B |= 0B010;    // prescaler 8
   OCR1A  = 16000;     // 8ms
-  TIMSK1 |= (1 << OCIE1A);  // 啟用比較中斷
+  TIMSK1 |= (1 << OCIE1A);
   TCNT1  = 0;
   sei();
-
-  // DFplayer Mini MP3相關
-  dfmp3.begin();
-  dfmp3.reset();
-  dfmp3.setVolume(8);
-
-  dfmp3.playMp3FolderTrack(1);
-  dfmp3.pause();
-
-  
 }
 
-// ════════════════════════════════════════════════════════════════════
-//  LOOP
-// ════════════════════════════════════════════════════════════════════
-
-uint32_t temp = 0;
+// ─── 主迴圈 (Loop) ───────────────────────────────────────────────────────────
 bool mus_is_started = false;
-void loop() {
 
+void loop() {
   uint32_t now = millis();
   readSerialEvents();
 
   switch (gameState) {
-
-    // ── LOBBY ──────────────────────────────────────────────────────
     case LOBBY:
-
-      //---- test start--
-      // resetGame();
-      // drawStaticUI();
-      // songStartMs  = millis();
-      // musicPlaying = true;
-      // lastFrameMs  = songStartMs;
-      // gameState    = PLAYING;
-      // TIMSK1 |= (1 << OCIE1A);
-      // TCNT1 = 0;
-      // ---------------
-
-      //lobbyPressA && lobbyPressB
       if (lobbyPressA && lobbyPressB) {
         resetGame();
         drawStaticUI();
@@ -525,43 +417,33 @@ void loop() {
         musicPlaying = true;
         lastFrameMs  = songStartMs;
         gameState    = PLAYING;
-        TIMSK1 |= 0B10;//啟用與A比較
+        TIMSK1 |= 0B10; // 啟用與 OCR1A 比較
         TCNT1 = 0;
-        
-        dfmp3.playMp3FolderTrack(1);  
       }
       break;
 
-    // ── PLAYING ────────────────────────────────────────────────────
     case PLAYING: {
-      // ── 1. 音符生成（依絕對時間掃描）─────────────────────────────
       if (!mus_is_started) {
-        dfmp3.start();
+        Serial.print((char)0x05); // 告知玩家 A 開始播放音樂
         mus_is_started = true;
       }
 
       if (musicPlaying) {
         uint32_t elapsed = now - songStartMs;
-
         while (musicIdx < SONG_LEN) {
           uint32_t spawnTime = pgm_read_dword(&SONG[musicIdx].spawnTime);
-          if (spawnTime > elapsed) break;  // 後面的都還沒到，不用繼續掃
+          if (spawnTime > elapsed) break;
 
           bool iy = pgm_read_byte(&SONG[musicIdx].isYellow);
           bool ia = pgm_read_byte(&SONG[musicIdx].isPlayerA);
           spawnNote(iy, ia);
           musicIdx++;
         }
-
-        if (musicIdx >= SONG_LEN) {
-          musicPlaying = false;
-        }
+        if (musicIdx >= SONG_LEN) musicPlaying = false;
       }
 
-      // ── 2. 每幀移動 & 重繪音符 ─────────────────────────────────
       if (frameChanged) {
         frameChanged = 0;
-
         for (uint8_t i = 0; i < MAX_NOTES; i++) {
             if (!notes[i].active) continue;
             
@@ -574,14 +456,11 @@ void loop() {
                 notes[i].active = false;
                 continue;
             }
-            
             drawNote(notes[i]);
         }
-
         drawScores();
       }
 
-      // ── 3. 遊戲結束 ────────────────────────────────────────────
       if (!gameOverPending && isGameOver()) {
         gameOverTimer   = now;
         gameOverPending = true;
@@ -596,13 +475,14 @@ void loop() {
       break;
     }
 
-    // ── RESULT ─────────────────────────────────────────────────────
     case RESULT:
       if (lobbyPressA && lobbyPressB) {
         resetGame();
         drawLobby();
+        Serial.print((char)0x06); // 告知玩家 A 停止播放音樂
         gameState = LOBBY;
       }
       break;
   }
 }
+
