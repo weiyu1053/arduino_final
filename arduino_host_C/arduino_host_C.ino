@@ -160,6 +160,21 @@ const MusicNote SONG[] PROGMEM = {
   {0,    true,  true },   // 黃 A 
   {0,    false, false},   // 藍 B，與上個音符在同個位置（0ms）生成
   {400,  false, true },   // 藍 A，再400ms生成
+  {800,    true,  true },   // 黃 A 
+  {800,    false, false},   // 藍 B，與上個音符在同個位置（0ms）生成
+  {1200,  false, true },   // 藍 A，再400ms生成
+  {1600,    true,  true },   // 黃 A 
+  {1600,    false, false},   // 藍 B，與上個音符在同個位置（0ms）生成
+  {2000,  false, true },   // 藍 A，再400ms生成
+  {2400,    true,  true },   // 黃 A 
+  {2400,    false, false},   // 藍 B，與上個音符在同個位置（0ms）生成
+  {2800,  false, true },   // 藍 A，再400ms生成
+  {3200,    true,  true },   // 黃 A 
+  {3200,    false, false},   // 藍 B，與上個音符在同個位置（0ms）生成
+  {3600,  false, true },   // 藍 A，再400ms生成
+  {4000,  false, true },   // 藍 A，再400ms生成
+  {4000,    true,  true },   // 黃 A 
+  {4400,    false, false},   // 藍 B，與上個音符在同個位置（0ms）生成
 };
 #define SONG_LEN (sizeof(SONG)/sizeof(SONG[0]))
 
@@ -182,6 +197,8 @@ bool lobbyPressA = false, lobbyPressB = false;
 uint32_t gameOverTimer   = 0;
 bool     gameOverPending = false;
 bool gameRestarting = false;
+
+bool frameChanged = 0;
 
 // ════════════════════════════════════════════════════════════════════
 //  圖形輔助
@@ -434,6 +451,11 @@ bool isGameOver() {
   return true;
 }
 
+ISR(TIMER1_COMPA_vect){
+  TCNT1 = 0;
+  frameChanged = 1;
+}
+
 // ════════════════════════════════════════════════════════════════════
 //  SETUP
 // ════════════════════════════════════════════════════════════════════
@@ -450,7 +472,17 @@ void setup() {
   dfmp3.reset();
   dfmp3.setVolume(12);
 
-  dfmp3.playMp3FolderTrack(1);  
+  
+
+  cli();//清空中斷
+  //reset
+  TCCR1A = 0;
+  TCCR1B = 0;
+
+  TCCR1B |= 0B010;//使用timer1 prescalar 8
+  
+  OCR1A = 16000; //設為計算所得要數到的數 8ms
+  sei();//啟用中斷
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -464,6 +496,7 @@ void loop() {
 
     // ── LOBBY ──────────────────────────────────────────────────────
     case LOBBY:
+      //lobbyPressA && lobbyPressB
       if (lobbyPressA && lobbyPressB) {
         resetGame();
         drawStaticUI();
@@ -471,6 +504,9 @@ void loop() {
         musicPlaying = true;
         lastFrameMs  = songStartMs;
         gameState    = PLAYING;
+        TIMSK1 |= 0B10;//啟用與A比較
+        TCNT1 = 0;
+        dfmp3.playMp3FolderTrack(1);  
       }
       break;
 
@@ -497,8 +533,8 @@ void loop() {
       }
 
       // ── 2. 每幀移動 & 重繪音符 ─────────────────────────────────
-      if (now - lastFrameMs >= FRAME_MS) {
-        lastFrameMs = now;
+      if (frameChanged) {
+        frameChanged = 0;
 
         for (uint8_t i = 0; i < MAX_NOTES; i++) {
           if (!notes[i].active) continue;
@@ -524,6 +560,7 @@ void loop() {
       if (!gameOverPending && isGameOver()) {
         gameOverTimer   = now;
         gameOverPending = true;
+        TIMSK1 |= 0B00;//關閉與A比較
       }
       if (gameOverPending && (now - gameOverTimer >= 1500)) {
         drawResult();
