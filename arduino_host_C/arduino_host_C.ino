@@ -441,8 +441,8 @@ void resetGame() {
   // 觸發重置通知
   gameRestarting = true;
   // test
-  // sendFeedback(true, 0);  // 通知 P1
-  // sendFeedback(false, 0); // 通知 P2
+  sendFeedback(true, 0);  // 通知 P1
+  sendFeedback(false, 0); // 通知 P2
   gameRestarting = false; // 發送完立刻關閉，避免影響後續判定
 }
 
@@ -469,34 +469,25 @@ void setup() {
   resetGame();
   drawLobby();
 
+  // ── Timer1 完整設定（必須在 DFPlayer 之前，且一次完成）──
+  cli();
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCCR1B |= 0B010;    // prescaler 8
+  OCR1A  = 16000;     // 8ms
+  TIMSK1 |= (1 << OCIE1A);  // 啟用比較中斷
+  TCNT1  = 0;
+  sei();
+
   // DFplayer Mini MP3相關
   dfmp3.begin();
   dfmp3.reset();
   dfmp3.setVolume(8);
 
-  dfmp3.playMp3FolderTrack(1);  
+  dfmp3.playMp3FolderTrack(1);
   dfmp3.pause();
 
-    Serial.println("dfmp3 done");  // 確認 DFPlayer 初始化有完成
-  // test
-        resetGame();
-        drawStaticUI();
-          Serial.println("drawStaticUI done");  // 確認有畫畫面
-        songStartMs  = millis();
-        musicPlaying = true;
-        lastFrameMs  = songStartMs;
-        gameState    = PLAYING;
-          Serial.println("gameState = PLAYING");
-
-  cli();//清空中斷
-  //reset
-  TCCR1A = 0;
-  TCCR1B = 0;
-
-  TCCR1B |= 0B010;//使用timer1 prescalar 8
   
-  OCR1A = 16000; //設為計算所得要數到的數 8ms
-  sei();//啟用中斷
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -504,6 +495,7 @@ void setup() {
 // ════════════════════════════════════════════════════════════════════
 
 uint32_t temp = 0;
+bool mus_is_started = false;
 void loop() {
 
   uint32_t now = millis();
@@ -513,7 +505,18 @@ void loop() {
 
     // ── LOBBY ──────────────────────────────────────────────────────
     case LOBBY:
-      dfmp3.stop();
+
+      //---- test start--
+      // resetGame();
+      // drawStaticUI();
+      // songStartMs  = millis();
+      // musicPlaying = true;
+      // lastFrameMs  = songStartMs;
+      // gameState    = PLAYING;
+      // TIMSK1 |= (1 << OCIE1A);
+      // TCNT1 = 0;
+      // ---------------
+
       //lobbyPressA && lobbyPressB
       if (lobbyPressA && lobbyPressB) {
         resetGame();
@@ -524,6 +527,7 @@ void loop() {
         gameState    = PLAYING;
         TIMSK1 |= 0B10;//啟用與A比較
         TCNT1 = 0;
+        
         dfmp3.playMp3FolderTrack(1);  
       }
       break;
@@ -531,7 +535,11 @@ void loop() {
     // ── PLAYING ────────────────────────────────────────────────────
     case PLAYING: {
       // ── 1. 音符生成（依絕對時間掃描）─────────────────────────────
-      dfmp3.start();
+      if (!mus_is_started) {
+        dfmp3.start();
+        mus_is_started = true;
+      }
+
       if (musicPlaying) {
         uint32_t elapsed = now - songStartMs;
 
@@ -577,7 +585,7 @@ void loop() {
       if (!gameOverPending && isGameOver()) {
         gameOverTimer   = now;
         gameOverPending = true;
-        TIMSK1 |= 0B00;//關閉與A比較
+        TIMSK1 &= ~(1 << OCIE1A); 
       }
       if (gameOverPending && (now - gameOverTimer >= 1500)) {
         drawResult();
