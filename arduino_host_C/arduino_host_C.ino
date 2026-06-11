@@ -24,6 +24,9 @@
  *  │  ── 玩家 B (Arduino B) ─────────────────────────────────────    │
  *  │    B.TX → 主機 D4  (SoftwareSerial RX)                          |
  *  |    B.RX → 主機 D5  (SoftwareSerial TX)                          │
+ *  |  ── DFplayer mini Mp3──────────────────────────────────────
+ *  |   TX → 6
+ *  |   RX → 7
  *  └─────────────────────────────────────────────────────────────────┘
  *
  *  通訊協定：玩家端按左鍵送 'L'，按右鍵送 'R'（9600 baud）
@@ -38,6 +41,24 @@
 #include <Adafruit_ILI9341.h>
 #include <SPI.h>
 #include <SoftwareSerial.h>
+
+#include <DFMiniMp3.h>
+
+SoftwareSerial mySerial(7, 6); // RX, TX
+
+// ════════════════════════════════════════════════════════════════════
+//  Dfplayer Mini Mp3相關
+// ════════════════════════════════════════════════════════════════════
+class Mp3Notify {
+public:
+  static void OnError([[maybe_unused]] DFMiniMp3<SoftwareSerial, Mp3Notify>& mp3, uint16_t errorCode) {}
+  static void OnPlayFinished([[maybe_unused]] DFMiniMp3<SoftwareSerial, Mp3Notify>& mp3, [[maybe_unused]] DfMp3_PlaySources source, uint16_t track) {}
+  static void OnPlaySourceOnline([[maybe_unused]] DFMiniMp3<SoftwareSerial, Mp3Notify>& mp3, [[maybe_unused]] DfMp3_PlaySources source) {}
+  static void OnPlaySourceInserted([[maybe_unused]] DFMiniMp3<SoftwareSerial, Mp3Notify>& mp3, [[maybe_unused]] DfMp3_PlaySources source) {}
+  static void OnPlaySourceRemoved([[maybe_unused]] DFMiniMp3<SoftwareSerial, Mp3Notify>& mp3, [[maybe_unused]] DfMp3_PlaySources source) {}
+};
+typedef DFMiniMp3<SoftwareSerial, Mp3Notify> DfMp3;
+DfMp3 dfmp3(mySerial);
 
 // ════════════════════════════════════════════════════════════════════
 //  Struct 定義（必須在所有函式之前）
@@ -423,6 +444,13 @@ void setup() {
   tft.setRotation(1);
   resetGame();
   drawLobby();
+
+  // DFplayer Mini MP3相關
+  dfmp3.begin();
+  dfmp3.reset();
+  dfmp3.setVolume(12);
+
+  dfmp3.playMp3FolderTrack(1);  
 }
 
 // ════════════════════════════════════════════════════════════════════
