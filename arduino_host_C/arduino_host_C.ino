@@ -44,7 +44,8 @@
 
 #include <DFMiniMp3.h>
 
-SoftwareSerial mySerial(7, 6); // RX, TX
+SoftwareSerial mySerial(7, 6); // RX, TX, 停用rx是為了改善音符卡頓的問題
+
 
 // ════════════════════════════════════════════════════════════════════
 //  Dfplayer Mini Mp3相關
@@ -121,8 +122,8 @@ SoftwareSerial serialB(4, 5);   // D4=RX(接B.TX), D5=TX(接B.RX)
 // ── 速度調整區 ──────────────────────────────────────────────────────
 // NOTE_SPEED：每幀移動幾像素，越大越快
 // FRAME_MS  ：每幀間隔，越小越順（建議 8~16）
-#define NOTE_SPEED   5     // px / frame  ← 調快（原本 2）
-#define FRAME_MS     8     // ms / frame  ← 刷新加倍（原本 16）
+#define NOTE_SPEED   10     // px / frame  ← 調快（原本 2）
+#define FRAME_MS     4     // ms / frame  ← 刷新加倍（原本 16）
 
 // 飛行距離 = 螢幕右緣到判定線
 // 飛行時間(ms) = (SCREEN_W - JUDGE_X) / NOTE_SPEED * FRAME_MS
@@ -157,9 +158,16 @@ PROGMEM：AVR 的巨集，指示編譯器把這份資料放進 Flash（程式記
 必須使用pgm_read_word存取。例如：pgm_read_word(&SONG[i].freq);
 */
 const MusicNote SONG[] PROGMEM = {
-  {0,    true,  true },   // 黃 A 
-  {0,    false, false},   // 藍 B，與上個音符在同個位置（0ms）生成
-  {400,  false, true },   // 藍 A，再400ms生成
+  {917, true , true }, // 黃 A
+  {1379, true , false}, // 黃 B
+  {1840, true , true }, // 黃 A
+  {2302, true , false}, // 黃 B
+  {2763, true , true }, // 黃 A
+  {3109, true , false}, // 黃 B
+  {3686, true , true }, // 黃 A
+  {4148, true , false}, // 黃 B
+  {7609, true , true }, // 黃 A
+  {8879, true , true }, // 黃 A
 };
 #define SONG_LEN (sizeof(SONG)/sizeof(SONG[0]))
 
@@ -422,8 +430,9 @@ void resetGame() {
 
   // 觸發重置通知
   gameRestarting = true;
-  sendFeedback(true, 0);  // 通知 P1
-  sendFeedback(false, 0); // 通知 P2
+  // test
+  // sendFeedback(true, 0);  // 通知 P1
+  // sendFeedback(false, 0); // 通知 P2
   gameRestarting = false; // 發送完立刻關閉，避免影響後續判定
 }
 
@@ -448,15 +457,30 @@ void setup() {
   // DFplayer Mini MP3相關
   dfmp3.begin();
   dfmp3.reset();
-  dfmp3.setVolume(12);
+  dfmp3.setVolume(8);
 
   dfmp3.playMp3FolderTrack(1);  
+  dfmp3.pause();
+
+    Serial.println("dfmp3 done");  // 確認 DFPlayer 初始化有完成
+  // test
+        resetGame();
+        drawStaticUI();
+          Serial.println("drawStaticUI done");  // 確認有畫畫面
+        songStartMs  = millis();
+        musicPlaying = true;
+        lastFrameMs  = songStartMs;
+        gameState    = PLAYING;
+          Serial.println("gameState = PLAYING");
 }
 
 // ════════════════════════════════════════════════════════════════════
 //  LOOP
 // ════════════════════════════════════════════════════════════════════
+
+uint32_t temp = 0;
 void loop() {
+
   uint32_t now = millis();
   readSerialEvents();
 
@@ -464,6 +488,7 @@ void loop() {
 
     // ── LOBBY ──────────────────────────────────────────────────────
     case LOBBY:
+      dfmp3.stop();
       if (lobbyPressA && lobbyPressB) {
         resetGame();
         drawStaticUI();
@@ -476,8 +501,8 @@ void loop() {
 
     // ── PLAYING ────────────────────────────────────────────────────
     case PLAYING: {
-
       // ── 1. 音符生成（依絕對時間掃描）─────────────────────────────
+      dfmp3.start();
       if (musicPlaying) {
         uint32_t elapsed = now - songStartMs;
 
@@ -501,20 +526,19 @@ void loop() {
         lastFrameMs = now;
 
         for (uint8_t i = 0; i < MAX_NOTES; i++) {
-          if (!notes[i].active) continue;
-
-          eraseNote(notes[i]);
-          notes[i].prevX = notes[i].x;
-          notes[i].x    -= NOTE_SPEED;
-
-          // 超過判定線左側太多 → 自動 MISS
-          if (notes[i].x < JUDGE_X - 50) {
-            showJudgeText(notes[i].isPlayerA, 0);
-            notes[i].active = false;
-            continue;
-          }
-
-          drawNote(notes[i]);
+            if (!notes[i].active) continue;
+            
+            eraseNote(notes[i]);
+            notes[i].prevX = notes[i].x;
+            notes[i].x    -= NOTE_SPEED;
+            
+            if (notes[i].x < JUDGE_X - 50) {
+                showJudgeText(notes[i].isPlayerA, 0);
+                notes[i].active = false;
+                continue;
+            }
+            
+            drawNote(notes[i]);
         }
 
         drawScores();
