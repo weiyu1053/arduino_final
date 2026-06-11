@@ -14,9 +14,11 @@
  *  │            GND                                              │
  *  │                                                             │
  *  │   TX(D1) ──→ 主機C 對應 RX 腳位                            │
- *  │              Arduino A → 主機 D0 (SoftwareSerial RX)       │
- *  │              Arduino B → 主機 D4 (SoftwareSerial RX)       │
- *  │                                                             │
+ *  │              Arduino A D5 → 主機 D0 (SoftwareSerial RX)      │
+ *  │              Arduino A D4 → 主機 D1 (SoftwareSerial TX)      │
+ *  │              Arduino B D5 → 主機 D4 (SoftwareSerial RX)      │
+ *  │              Arduino B D4 → 主機 D5 (SoftwareSerial TX)      │
+ *  │   D4=RX(接B.TX), D5=TX(接B.RX)                                                          │
  *  │   注意：Uno 硬體中斷只有 D2(INT0) 與 D3(INT1)                 │
  *  └─────────────────────────────────────────────────────────────┘
  *
