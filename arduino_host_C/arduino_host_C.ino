@@ -83,14 +83,14 @@ SoftwareSerial serialB(4, 5);   // D4=RX (接 B.TX), D5=TX (接 B.RX)
 #define LANE_A_Y      4    // P1 跑道起始 Y 座標
 #define LANE_B_Y    128    // P2 跑道起始 Y 座標
 #define DIVIDER_Y   116    // 分隔線 Y 座標
-#define NOTE_R       13    // 音符半徑 (px)
+#define NOTE_R       9    // 音符半徑 (px)
 #define JUDGE_X      45    // 判定線 X 座標
 
 // ─── 速度調整區 ──────────────────────────────────────────────────────────────
 // NOTE_SPEED：每幀移動像素，越大越快
 // FRAME_MS  ：每幀間隔，越小越順（建議 4~16）
-#define NOTE_SPEED   10     // px / frame
-#define FRAME_MS     4      // ms / frame
+#define NOTE_SPEED   5     // px / frame
+#define FRAME_MS     20      // ms / frame
 
 // 飛行距離 = 螢幕右緣到判定線
 #define TRAVEL_PX   (SCREEN_W - JUDGE_X + NOTE_R)
@@ -116,24 +116,222 @@ GameState gameState = LOBBY;
  * isPlayerA: true=玩家 A, false=玩家 B
  */
 const MusicNote SONG[] PROGMEM = {
-  {0,    true,  true },   // 黃 A 
-  {0,    false, false},   // 藍 B
-  {400,  false, true },   // 藍 A
-  {800,    true,  true },   // 黃 A 
-  {800,    false, false},   // 藍 B
-  {1200,  false, true },   // 藍 A
-  {1600,    true,  true },   // 黃 A 
-  {1600,    false, false},   // 藍 B
-  {2000,  false, true },   // 藍 A
-  {2400,    true,  true },   // 黃 A 
-  {2400,    false, false},   // 藍 B
-  {2800,  false, true },   // 藍 A
-  {3200,    true,  true },   // 黃 A 
-  {3200,    false, false},   // 藍 B
-  {3600,  false, true },   // 藍 A
-  {4000,  false, true },   // 藍 A
-  {4000,    true,  true },   // 黃 A 
-  {4400,    false, false},   // 藍 B
+  {8791, false, true },
+  {8811, true , false},
+  {9441, true , true },
+  {9650, false, false},
+  {10070, false, true },
+  {10070, true , false},
+  {10909, true , false},
+  {11119, false, true },
+  {11538, false, false},
+  {11538, true , true },
+  {12587, false, true },
+  {12587, false, false},
+  {12987, false, true },
+  {12987, false, false},
+  {13427, false, true },
+  {13427, false, false},
+  {13846, true , true },
+  {13846, true , false},
+  {14685, true , true },
+  {14895, false, false},
+  {15105, false, true },
+  {16154, true , false},
+  {16364, true , true },
+  {16573, false, false},
+  {17832, false, true },
+  {17832, true , false},
+  {18232, true , false},
+  {18252, false, true },
+  {18671, false, true },
+  {18671, true , false},
+  {19301, false, false},
+  {19301, true , true },
+  {20120, false, true },
+  {20350, false, false},
+  {20539, true , true },
+  {21399, true , false},
+  {21608, false, true },
+  {21818, true , false},
+  {23077, false, false},
+  {23077, true , true },
+  {23916, false, true },
+  {24126, false, false},
+  {24336, true , true },
+  {24545, true , false},
+  {25804, true , true },
+  {25804, false, false},
+  {27273, true , false},
+  {27273, false, true },
+  {28951, false, true },
+  {28951, false, false},
+  {29351, true , true },
+  {29371, false, false},
+  {29790, false, true },
+  {29790, true , false},
+  {30400, false, true },
+  {30420, true , false},
+  {31259, true , false},
+  {31449, false, true },
+  {31678, true , false},
+  {32517, false, false},
+  {32727, true , true },
+  {32937, false, false},
+  {34196, true , true },
+  {34406, true , false},
+  {34615, true , false},
+  {35455, true , true },
+  {35455, false, false},
+  {36294, true , false},
+  {36503, false, true },
+  {36713, false, true },
+  {37133, true , true },
+  {37133, false, false},
+  {37552, true , true },
+  {37762, true , false},
+  {37972, true , false},
+  {39021, false, true },
+  {39021, true , false},
+  {39441, true , true },
+  {39441, false, false},
+  {39860, false, true },
+  {39860, true , false},
+  {40470, false, true },
+  {40490, true , false},
+  {41329, false, false},
+  {41538, true , false},
+  {41748, true , true },
+  {42777, false, true },
+  {43007, true , true },
+  {43217, true , false},
+  {44476, true , true },
+  {44476, false, false},
+  {44875, false, true },
+  {44895, true , false},
+  {45315, false, true },
+  {45315, true , false},
+  {45714, false, true },
+  {45734, true , false},
+  {46993, true , true },
+  {46993, true , false},
+  {48252, false, false},
+  {48252, false, true },
+  {49700, false, true },
+  {49930, true , false},
+  {50120, false, true },
+  {50769, true , true },
+  {50769, false, false},
+  {51818, true , false},
+  {52028, false, true },
+  {52238, true , false},
+  {52867, true , true },
+  {53077, false, true },
+  {53077, true , false},
+  {53287, false, false},
+  {54755, true , true },
+  {54755, false, false},
+  {55175, true , false},
+  {55175, false, true },
+  {55594, true , false},
+  {55804, true , true },
+  {56643, false, false},
+  {56853, true , true },
+  {57063, false, false},
+  {57902, false, true },
+  {58112, true , false},
+  {58322, false, true },
+  {59580, true , true },
+  {59580, false, false},
+  {60000, true , true },
+  {60000, false, false},
+  {60420, false, true },
+  {60420, true , false},
+  {60839, true , true },
+  {60839, false, false},
+  {61678, false, false},
+  {61888, true , true },
+  {62098, true , true },
+  {62937, false, true },
+  {63147, false, false},
+  {63357, true , false},
+  {64615, true , true },
+  {64615, false, false},
+  {65245, false, true },
+  {65455, false, false},
+  {65664, true , true },
+  {65874, true , false},
+  {66503, true , false},
+  {66713, false, true },
+  {66713, true , false},
+  {66923, false, true },
+  {67552, false, false},
+  {67762, true , true },
+  {67762, false, false},
+  {67972, true , true },
+  {68601, true , false},
+  {68811, true , false},
+  {69021, true , true },
+  {69441, false, true },
+  {69650, false, false},
+  {69860, true , true },
+  {70070, false, false},
+  {70280, false, true },
+  {70699, true , true },
+  {71329, false, false},
+  {71538, false, true },
+  {71748, true , false},
+  {72378, true , true },
+  {72378, false, false},
+  {72797, false, true },
+  {72797, true , false},
+  {73217, false, true },
+  {73217, true , false},
+  {74685, true , true },
+  {74685, false, false},
+  {75105, true , true },
+  {75105, false, false},
+  {75524, true , true },
+  {75524, false, false},
+  {77203, true , false},
+  {77203, false, true },
+  {77622, true , true },
+  {77622, false, false},
+  {78042, false, true },
+  {78042, true , false},
+  {79720, false, true },
+  {79720, true , false},
+  {80140, true , true },
+  {80140, false, false},
+  {80559, false, true },
+  {80559, true , false},
+  {81818, true , true },
+  {81818, false, false},
+  {82238, false, true },
+  {82238, true , false},
+  {82657, true , true },
+  {82657, false, false},
+  {83077, false, true },
+  {83077, true , false},
+  {84965, false, true },
+  {85175, false, false},
+  {85385, false, false},
+  {85594, false, true },
+  {86224, true , false},
+  {86434, true , true },
+  {86643, true , false},
+  {87273, true , true },
+  {87483, false, false},
+  {87902, true , false},
+  {87902, false, true },
+  {88951, false, true },
+  {88951, true , false},
+  {89161, true , true },
+  {89161, false, false},
+  {89371, false, true },
+  {89371, true , false},
+  {90629, true , true },
+  {90629, true , false},
 };
 #define SONG_LEN (sizeof(SONG)/sizeof(SONG[0]))
 
@@ -154,6 +352,8 @@ bool lobbyPressA = false, lobbyPressB = false;
 uint32_t gameOverTimer   = 0;
 bool     gameOverPending = false;
 bool gameRestarting = false;
+
+bool mus_is_started = false;
 
 volatile bool frameChanged = 0;
 
@@ -358,6 +558,7 @@ void resetGame() {
   prevScoreA = prevScoreB = -1;
   musicIdx     = 0;
   musicPlaying = false;
+  mus_is_started = false; // 
   lobbyPressA  = lobbyPressB  = false;
   gameOverPending = false;
   for (uint8_t i = 0; i < MAX_NOTES; i++) notes[i].active = false;
@@ -402,7 +603,6 @@ void setup() {
 }
 
 // ─── 主迴圈 (Loop) ───────────────────────────────────────────────────────────
-bool mus_is_started = false;
 
 void loop() {
   uint32_t now = millis();
@@ -424,7 +624,7 @@ void loop() {
 
     case PLAYING: {
       if (!mus_is_started) {
-        Serial.print((char)0x05); // 告知玩家 A 開始播放音樂
+        Serial.print(0x05); // 告知玩家 A 開始播放音樂
         mus_is_started = true;
       }
 
@@ -432,7 +632,8 @@ void loop() {
         uint32_t elapsed = now - songStartMs;
         while (musicIdx < SONG_LEN) {
           uint32_t spawnTime = pgm_read_dword(&SONG[musicIdx].spawnTime);
-          if (spawnTime > elapsed) break;
+          uint32_t travelMs = (uint32_t)TRAVEL_PX * FRAME_MS / NOTE_SPEED;
+          if (spawnTime > elapsed + travelMs) break;
 
           bool iy = pgm_read_byte(&SONG[musicIdx].isYellow);
           bool ia = pgm_read_byte(&SONG[musicIdx].isPlayerA);
@@ -444,12 +645,15 @@ void loop() {
 
       if (frameChanged) {
         frameChanged = 0;
+        uint32_t now2 = millis();
+        float Rtime = (float)(now2 - lastFrameMs);
+        lastFrameMs = now2;
         for (uint8_t i = 0; i < MAX_NOTES; i++) {
             if (!notes[i].active) continue;
             
             eraseNote(notes[i]);
             notes[i].prevX = notes[i].x;
-            notes[i].x    -= NOTE_SPEED;
+            notes[i].x    -= (int16_t)(NOTE_SPEED * Rtime / FRAME_MS);
             
             if (notes[i].x < JUDGE_X - 50) {
                 showJudgeText(notes[i].isPlayerA, 0);
@@ -479,7 +683,7 @@ void loop() {
       if (lobbyPressA && lobbyPressB) {
         resetGame();
         drawLobby();
-        Serial.print((char)0x06); // 告知玩家 A 停止播放音樂
+        Serial.print(0x06); // 告知玩家 A 停止播放音樂
         gameState = LOBBY;
       }
       break;

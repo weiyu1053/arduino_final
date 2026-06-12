@@ -19,8 +19,8 @@
  *    Strobe → D7
  *
  *  ── DFPlayer Mini MP3 ──────────────────────────────────────────────────────────
- *    Arduino TX (D6) → MP3 RX (建議串接 1kΩ 電阻)
- *    Arduino RX (D7) → MP3 TX
+ *    Arduino TX (D10) → MP3 RX (建議串接 1kΩ 電阻)
+ *    Arduino RX (D11) → MP3 TX
  *
  *  通訊協定：
  *    按下左鍵 → 送出 'L'
@@ -36,7 +36,7 @@
 #include <DFMiniMp3.h>  
 
 // ─── DFPlayer Mini MP3 設定 ───────────────────────────────────────────────────
-SoftwareSerial mp3Serial(7, 6);
+SoftwareSerial mp3Serial(11, 10);
 
 class Mp3Notify {
 public:
@@ -127,9 +127,7 @@ void setup() {
   // MP3 播放器初始化
   dfmp3.begin();
   dfmp3.reset();
-  dfmp3.setVolume(15);
-  dfmp3.playMp3FolderTrack(1); // 預載第一首
-  dfmp3.pause();
+  dfmp3.setVolume(30);
 }
 
 // ─── 主迴圈 (Loop) ───────────────────────────────────────────────────────────
@@ -167,7 +165,7 @@ void recvUART() {
     else if (rc == '3') score += 150;
     else if (rc == '4') score = 0;
     else if (rc == '5') {
-      dfmp3.start(); // 進入 PLAYING 狀態
+      dfmp3.playMp3FolderTrack(1); // 進入 PLAYING 狀態
     }
     else if (rc == '6') {
       dfmp3.stop();  // 回到 LOBBY 狀態
